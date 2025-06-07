@@ -1,36 +1,64 @@
-// Critical: Setup WebCrypto before importing Neon
 import { Crypto } from '@peculiar/webcrypto';
 
-// Railway Node.js 18 WebCrypto fix - must be synchronous
-if (process.env.NODE_ENV === 'production' || !globalThis.crypto?.getRandomValues) {
-  const webcrypto = new Crypto();
-  
-  // Override the global crypto object for Railway compatibility
-  const cryptoPolyfill = {
-    getRandomValues: webcrypto.getRandomValues.bind(webcrypto),
-    subtle: webcrypto.subtle,
-    randomUUID: webcrypto.randomUUID?.bind(webcrypto) || (() => {
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
-    })
-  };
-  
-  // Force override globalThis.crypto
-  try {
-    delete (globalThis as any).crypto;
-  } catch {}
-  
-  (globalThis as any).crypto = cryptoPolyfill;
-  
-  // Also set on process for Node.js modules
-  if (typeof process !== 'undefined' && !process.env.DISABLE_CRYPTO_PATCH) {
-    (process as any).crypto = cryptoPolyfill;
-  }
+// AGGRESSIVE WebCrypto polyfill - MUST run before ANY other imports
+console.log('[WebCrypto] Starting aggressive polyfill for Railway...');
+
+// Force create new WebCrypto instance
+const forceWebCrypto = new Crypto();
+
+// Delete any existing crypto reference
+try {
+  delete (globalThis as any).crypto;
+  delete (global as any).crypto;
+} catch (e) {
+  // Ignore delete errors
 }
 
+// Create complete crypto implementation
+const cryptoImpl = {
+  getRandomValues: function(array: any) {
+    console.log('[WebCrypto] getRandomValues called');
+    return forceWebCrypto.getRandomValues(array);
+  },
+  subtle: forceWebCrypto.subtle,
+  randomUUID: function() {
+    if (forceWebCrypto.randomUUID) {
+      return forceWebCrypto.randomUUID();
+    }
+    // Fallback UUID generation
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+};
+
+// Force set on all possible global references
+(globalThis as any).crypto = cryptoImpl;
+if (typeof global !== 'undefined') {
+  (global as any).crypto = cryptoImpl;
+}
+if (typeof window !== 'undefined') {
+  (window as any).crypto = cryptoImpl;
+}
+
+// Override the 'w' variable that Neon uses internally
+(globalThis as any).w = cryptoImpl;
+
+console.log('[WebCrypto] Aggressive polyfill applied successfully');
+console.log('[WebCrypto] Testing getRandomValues:', typeof globalThis.crypto?.getRandomValues);
+
+// Test the implementation immediately
+try {
+  const testArray = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(testArray);
+  console.log('[WebCrypto] getRandomValues test passed');
+} catch (error) {
+  console.error('[WebCrypto] getRandomValues test failed:', error);
+}
+
+// NOW import Neon modules
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from "ws";
