@@ -13,11 +13,19 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Build the application
-RUN npm run build:client && node esbuild.config.js
+# Run pre-deploy commands
+RUN echo "Executando pre-deploy commands..."
+# Exemplos de comandos que você pode adicionar:
+# RUN npm run lint
+# RUN npm run test
+# RUN npm run migrate
+# RUN npm run seed-database
+
+# Build the application (Railway build command)
+RUN node esbuild.config.js
 
 # Expose port
 EXPOSE 5000
 
-# Start the application
-CMD ["npm", "start"]
+# Start the application (Railway start command)
+CMD ["node", "dist/railway-entry.js"]
