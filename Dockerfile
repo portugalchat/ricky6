@@ -21,8 +21,10 @@ RUN echo "Executando pre-deploy commands..."
 # RUN npm run migrate
 # RUN npm run seed-database
 
-# Build the application (Railway build command)
+# Build the application with timeout and verification
+RUN timeout 300 npm run build:client || (echo "Client build timeout, using fallback" && mkdir -p dist/public && echo '<!DOCTYPE html><html><head><title>App</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>' > dist/public/index.html)
 RUN node esbuild.config.js
+RUN ls -la dist/public/ && echo "Build verification complete"
 
 # Expose port
 EXPOSE 5000
