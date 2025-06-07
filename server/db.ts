@@ -5,8 +5,14 @@ import ws from "ws";
 import * as schema from "@shared/schema";
 
 // Polyfill WebCrypto for Neon database in Node.js environment
-if (!globalThis.crypto) {
-  globalThis.crypto = new Crypto();
+if (!globalThis.crypto || !globalThis.crypto.getRandomValues) {
+  const crypto = new Crypto();
+  if (!globalThis.crypto) {
+    globalThis.crypto = crypto;
+  } else {
+    // If crypto exists but getRandomValues doesn't, add it
+    globalThis.crypto.getRandomValues = crypto.getRandomValues.bind(crypto);
+  }
 }
 
 neonConfig.webSocketConstructor = ws;
