@@ -4,17 +4,18 @@ import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from "ws";
 import * as schema from "@shared/schema";
 
-// Polyfill WebCrypto for Neon database in Node.js environment
-if (!globalThis.crypto || !globalThis.crypto.getRandomValues) {
-  const crypto = new Crypto();
-  if (!globalThis.crypto) {
-    globalThis.crypto = crypto;
-  } else {
-    // If crypto exists but getRandomValues doesn't, add it
-    globalThis.crypto.getRandomValues = crypto.getRandomValues.bind(crypto);
-  }
+// Force WebCrypto polyfill for Neon database compatibility
+const crypto = new Crypto();
+
+// Override global crypto completely to ensure all methods work
+globalThis.crypto = crypto;
+
+// Also ensure it's available on global (for compatibility)
+if (typeof global !== 'undefined') {
+  global.crypto = crypto;
 }
 
+// Configure Neon to use ws for WebSocket connections
 neonConfig.webSocketConstructor = ws;
 
 // Use Supabase database URL if available, otherwise fallback to DATABASE_URL
