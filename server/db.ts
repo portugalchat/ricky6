@@ -1,29 +1,40 @@
+// Critical: Setup WebCrypto before importing Neon
 import { Crypto } from '@peculiar/webcrypto';
+
+// Railway Node.js 18 WebCrypto fix - must be synchronous
+if (process.env.NODE_ENV === 'production' || !globalThis.crypto?.getRandomValues) {
+  const webcrypto = new Crypto();
+  
+  // Override the global crypto object for Railway compatibility
+  const cryptoPolyfill = {
+    getRandomValues: webcrypto.getRandomValues.bind(webcrypto),
+    subtle: webcrypto.subtle,
+    randomUUID: webcrypto.randomUUID?.bind(webcrypto) || (() => {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    })
+  };
+  
+  // Force override globalThis.crypto
+  try {
+    delete (globalThis as any).crypto;
+  } catch {}
+  
+  (globalThis as any).crypto = cryptoPolyfill;
+  
+  // Also set on process for Node.js modules
+  if (typeof process !== 'undefined' && !process.env.DISABLE_CRYPTO_PATCH) {
+    (process as any).crypto = cryptoPolyfill;
+  }
+}
+
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from "ws";
 import * as schema from "@shared/schema";
-
-// Setup WebCrypto polyfill for Neon database compatibility
-const webcrypto = new Crypto();
-
-// Polyfill approach for Node.js environments (especially Railway)
-if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function') {
-  // Set the polyfilled crypto object with proper methods
-  Object.defineProperty(globalThis, 'crypto', {
-    value: {
-      getRandomValues: webcrypto.getRandomValues.bind(webcrypto),
-      subtle: webcrypto.subtle,
-      randomUUID: webcrypto.randomUUID?.bind(webcrypto) || (() => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      }))
-    } as Crypto,
-    writable: false,
-    configurable: true
-  });
-}
 
 neonConfig.webSocketConstructor = ws;
 
