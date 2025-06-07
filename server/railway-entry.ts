@@ -1,44 +1,33 @@
-// Railway production entry point with forced WebCrypto polyfill
-import { Crypto } from '@peculiar/webcrypto';
-
-// Immediate WebCrypto setup for Railway Node.js 18
-console.log('[Railway] Forcing WebCrypto polyfill...');
-
-const webcrypto = new Crypto();
-
-// Create polyfill object
-const cryptoPolyfill = {
-  getRandomValues: function(array: any) {
-    console.log('[Railway] getRandomValues called');
-    return webcrypto.getRandomValues(array);
-  },
-  subtle: webcrypto.subtle,
-  randomUUID: function() {
-    return webcrypto.randomUUID ? webcrypto.randomUUID() : 
-      'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
-  }
-};
-
-// Force override all possible crypto references
+// FORCE override EVERYTHING
 delete (globalThis as any).crypto;
-(globalThis as any).crypto = cryptoPolyfill;
+delete (global as any).crypto;
 
-if (typeof global !== 'undefined') {
-  delete (global as any).crypto;
-  (global as any).crypto = cryptoPolyfill;
+(globalThis as any).crypto = cryptoPolyfill;
+(global as any).crypto = cryptoPolyfill;
+
+// Override the internal 'w' variable that Neon uses
+(globalThis as any).w = cryptoPolyfill;
+
+// Override process.versions to fool Neon into thinking we have WebCrypto
+if (typeof process !== 'undefined') {
+  process.env.NODE_ENV = 'production';
+  (process as any).crypto = cryptoPolyfill;
 }
 
-// Ensure environment is production
-process.env.NODE_ENV = 'production';
+console.log('[Railway] AGGRESSIVE WebCrypto override complete');
+console.log('[Railway] globalThis.crypto:', typeof globalThis.crypto?.getRandomValues);
+console.log('[Railway] global.crypto:', typeof (global as any).crypto?.getRandomValues);
 
-console.log('[Railway] WebCrypto polyfill applied successfully');
-console.log('[Railway] globalThis.crypto.getRandomValues:', typeof globalThis.crypto?.getRandomValues);
+// Test immediately
+try {
+  const test = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(test);
+  console.log('[Railway] WebCrypto test PASSED');
+} catch (error) {
+  console.error('[Railway] WebCrypto test FAILED:', error);
+}
 
-// Now import the main application
+// NOW import the main application
 import('./index.js').then(() => {
   console.log('[Railway] Application started successfully');
 }).catch((error) => {
